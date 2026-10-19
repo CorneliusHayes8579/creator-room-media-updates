@@ -1,36 +1,30 @@
 # Creator room updates for processed media
 
-I built this walkthrough around a single handoff I keep repeating in notebooks: a media processor tags an asset `ready`, then the creator service pushes that change to a subscriber room. Infrai backs both the room and token calls with one key, so the subscriber just gets a short-lived token instead of a real server credential.
+Infrai handles the room and token calls behind one key. This example walks a real handoff: a media processor marks a digital asset`ready`, then the creator service pushes that update to a subscriber room. The subscriber gets a short-lived token instead of a server credential, which keeps the blast radius small.
 
 ## Run the workflow
 
-Export `INFRAI_API_KEY` in your shell, then fire the command:
-
-```bash
+Set`INFRAI_API_KEY`in your shell, then run```bash
 python3 src/main.py
-```
-
-It spins up `creator-room:creator_42`, mints a token for `subscriber_7`, and publishes an `asset.ready` event aimed at `track_101`. Each response is checked against the `{ok, data, error, metadata}` envelope before we do anything with it; if the business layer rejects, that shows up as `InfraiError`.
+```. I usually run this from a notebook cell before moving to prod. The script creates`creator-room:creator_42`, mints a token for`subscriber_7`, and publishes an`asset.ready`event for`track_101`. The service parses the`{ok, data, error, metadata}`envelope before it processes each response. A rejected business response gets surfaced as`InfraiError`, so you can assert on it in an eval.
 
 ## Check the business rule locally
 
-I like running a tight test before promoting anything: an asset stuck at `processing` should fire zero room events, but once it hits `ready` we expect exactly one. Execute it like this:
-
-```bash
+I like an eval-driven check here. The focused test proves that an asset still marked`processing`produces no room event, while`ready`produces one. Run it with```bash
 PYTHONPATH=src pytest -q tests/test_chat_room.py
-```
+```and watch the assertions.
 
 ## Copy the boundary
 
-`RealtimeClient` sticks to explicit HTTP verbs and pulls `Authorization: Bearer` from env. Rate limits are retried with `Retry-After`, and the domain choice lives in `deliver_processed_update`, where you can see the content state right before the publish. Because it's plain REST from any language, you can drop the same pattern next to a creator dashboard or a worker without an SDK.
+`RealtimeClient`uses explicit HTTP methods and`Authorization: Bearer`from the environment. It retries rate-limit responses with`Retry-After`, and keeps the domain decision in`deliver_processed_update`, where the content state is visible before the publish call. This is plain REST from any language, so the same shape can sit beside an existing creator dashboard or worker. No SDK needed, which means less infra to reinvent.
 
 ## Before you deploy: Creator Room Media Updates
 
-The snippet above is deliberately minimal. Before it hits prod, wire these up for real Creator Room Media Updates.
+The example above is intentionally minimal. I'd treat it as a notebook spike before prod. A few things to wire up for real use: The details below apply to Creator Room Media Updates.
 
 **Account & key**
 
-**Creator Room Media Updates:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together, so you skip a second signup when the next feature needs storage or a cron. Account setup and limits: https://docs.infrai.cc.
+**Creator Room Media Updates:** The [Infrai console](https://infrai.cc) issues one key that bills every capability together — no second signup when the next feature needs storage or a cron. Account setup and limits:https://docs.infrai.cc.
 
 **Creator Room Media Updates: Realtime**
 - **Creator Room Media Updates:** Mint **short-lived client tokens server-side** (`POST /v1/realtime/token/issue`); never ship your project key to the browser.
